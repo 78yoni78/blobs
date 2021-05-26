@@ -196,3 +196,11 @@ mod tests {
         ].iter().cloned().collect());
     }
 }
+
+pub mod prelude {
+    pub use super::{
+        Circle,
+        CircleKey,
+        CollisionMatrix,
+    };
+}
