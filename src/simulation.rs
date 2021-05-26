@@ -1,19 +1,35 @@
-mod keyed_set;
-mod window;
-mod physics;
-mod simulation;
+//! Genetic simulation of natural selection.
+//!
+//! Module contains the simulation data structure which
+//! contains the data needed to compute the genetic simulation
+//! of blob that eat food.
+//! 
+//! The API is designed to enable modification and interaction 
+//! with an executing simulation.
+//!
+//! # Example
+//!
+//! ```
+//! use crate::simulation::prelude::*;
+//! 
+//! let mut sim = Simulation::new(SimulationConfig {
+//!     size: Vector2::new(600., 800.)
+//! });
+//! 
+//! sim.insert_blob(Blob::new());
+//! ```
 
-use std::{
-    time,
-    collections::HashMap,
-};
+use std::collections::HashMap;
 
 use rand::prelude::*;
 
 use raylib::prelude::*;
 
-use crate::keyed_set::prelude::*;
-use crate::window::prelude::*;
+use crate::{
+    window::DrawingContext,
+    keyed_set::prelude::*,
+    physics::{self, prelude::*},
+};
 
 
 /// Returns -1 for very different colors and 1 for same color
@@ -44,12 +60,13 @@ pub struct Blob {
 
     pub pos: Vector2,
     pub direction: Vector2,
-    pub circle: physics::CircleKey,
-    pub sight_circle: physics::CircleKey,
+    pub circle: CircleKey,
+    pub sight_circle: CircleKey,
 }
 
+#[derive(Default)]
 pub struct SimulationConfig {
-    pub world_size: Vector2,
+    pub size: Vector2,
 }
 
 enum CircleObject {
@@ -147,7 +164,7 @@ impl Simulation {
     }
 
     pub fn add_random_blob(&mut self) {
-        let blob = Blob::new_random(&self.config.world_size, &mut self.physics);
+        let blob = Blob::new_random(&self.config.size, &mut self.physics);
         //  copy the keys before moving blob into blobs
         let circle = blob.circle;   
         let sight = blob.sight_circle;   
@@ -159,8 +176,8 @@ impl Simulation {
 
     pub fn add_random_food(&mut self) {
         let pos = Vector2 {
-            x: random::<f32>() * self.config.world_size.x as f32,
-            y: random::<f32>() * self.config.world_size.y as f32,
+            x: random::<f32>() * self.config.size.x as f32,
+            y: random::<f32>() * self.config.size.y as f32,
         };
         let key = self.foods.insert(pos);
         let circle_key = self.physics.insert(physics::Circle {
@@ -260,46 +277,4 @@ impl Blob {
         world.get_mut(self.circle).unwrap().center = self.pos;
         world.get_mut(self.sight_circle).unwrap().center = self.pos;
     }
-}
-
-fn main() {
-    //  options
-    let start_blobs = 20;
-    let start_foods = 200;
-    let simulation_config = SimulationConfig {
-        world_size: Vector2::new(1040f32, 680f32),
-    };
-    let window_config = WindowConfig {
-        width: 1040,
-        height: 680,
-        title: "Blobs",
-    }; 
-
-    //  allocate resources
-    let mut sim = Simulation::new(simulation_config);
-    let mut window = Window::new(&window_config); 
-    
-    //  initialize simulation
-    for _ in 0..start_blobs {
-        sim.add_random_blob();
-    }
-    //  initialize simulation
-    for _ in 0..start_foods {
-        sim.add_random_food();
-    }
-
-    let mut last_frame_time = time::Instant::now();
-    window.draw_loop(|mut draw| {
-        //  record time and calculate delta
-        let frame_time = time::Instant::now();
-        let delta_time = (frame_time - last_frame_time).as_secs_f32();
-        last_frame_time = frame_time;
-        //  draw and simulate
-        draw.clear_background(Color::WHITE);
-        sim.step(&mut draw, delta_time);
-
-        if draw.is_mouse_button_pressed(MouseButton::MOUSE_LEFT_BUTTON) {
-            sim.add_random_blob();
-        }
-    });
 }
