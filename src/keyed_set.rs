@@ -124,10 +124,6 @@ impl<T> IntoIterator for KeyedSet<T> {
     }
 }
 
-pub struct Iter<T> {
-    set: KeyedSet<T>,
-}
-
 impl<'a, T> IntoIterator for &'a KeyedSet<T> {
     type Item = (&'a Key<T>, &'a T);
     type IntoIter = hash_map::Iter<'a, Key<T>, T>;
@@ -135,10 +131,6 @@ impl<'a, T> IntoIterator for &'a KeyedSet<T> {
     fn into_iter(self) -> Self::IntoIter {
         self.map.iter()
     }
-}
-
-pub struct IterMut<T> {
-    set: KeyedSet<T>,
 }
 
 impl<'a, T> IntoIterator for &'a mut KeyedSet<T> {
