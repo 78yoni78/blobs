@@ -25,15 +25,14 @@ use rand::prelude::*;
 
 use raylib::prelude::*;
 
-use crate::{
-    window::DrawingContext,
-    keyed_set::prelude::*,
-    physics::{self, prelude::*},
-};
+use crate::{keyed_set::prelude::*, physics::{self, prelude::*}, window::DrawingContext};
 
+
+/// Returns a vector2 with x in [0,1) and y in [0,1)
+fn random_vector2() -> Vector2 { Vector2::new(random(), random()) }
 
 /// Returns -1 for very different colors and 1 for same color
-pub fn color_dot(a: &Color, b: &Color) -> f32 {
+fn color_similarity(a: &Color, b: &Color) -> f32 {
     let a = a.color_to_hsv();
     let b = b.color_to_hsv();
     let angle_difference = {
@@ -46,114 +45,113 @@ pub fn color_dot(a: &Color, b: &Color) -> f32 {
     ret
 }
 
-pub struct Blob {
+#[derive(Debug)]
+pub struct Blob {    
     pub speed: f32,
     pub rotation_speed: f32,
-    pub rad: f32,
+    radius: f32,
     pub color: Color,
-    
-    pub sight_depth: f32, 
+
+    sight_depth: f32, 
     pub pov: f32, 
     pub favorite_color: Color, 
     pub color_attraction: f32,
     pub color_repulsion: f32,
 
-    pub pos: Vector2,
+    pos: Vector2,
     pub direction: Vector2,
-    pub circle: CircleKey,
-    pub sight_circle: CircleKey,
+    circle: Key<Circle>,
+    sight_circle: Key<Circle>,
 }
 
-#[derive(Default)]
-pub struct SimulationConfig {
-    pub size: Vector2,
+#[derive(Debug)]
+pub struct Food {
+    pos: Vector2,
+    circle: Key<Circle>,
 }
 
-enum CircleObject {
-    Blob(Key),
-    BlobSight(Key),
-    Food(Key),
-}
-
-impl CircleObject {
-    pub fn color(&self, blobs: &KeyedSet<Blob>) -> Color {
-        match self {
-            &CircleObject::Blob(blob_key) => {
-                blobs.get(blob_key).unwrap().color
-            }
-            CircleObject::Food(_) => Simulation::FOOD_COLOR,
-            CircleObject::BlobSight(_) => panic!("Cannot get color of blob sight"),
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+pub enum CircleObject {
+    Blob(Key<Blob>),
+    Food(Key<Food>),
+    BlobSight(Key<Blob>),
 }
 
 pub struct Simulation {
-    config: SimulationConfig,
+    size: Vector2,
     blobs: KeyedSet<Blob>,
-    foods: KeyedSet<Vector2>,
+    foods: KeyedSet<Food>,
+    objects: HashMap<Key<Circle>, CircleObject>,
     physics: physics::World,
-    objects: HashMap<physics::CircleKey, CircleObject>,
 }
 
 impl Simulation {
-    pub const BLOB_LAYER: physics::Layer = physics::Layer::new(0); 
-    pub const FOOD_LAYER: physics::Layer = physics::Layer::new(1); 
-    pub const SIGHT_LAYER: physics::Layer = physics::Layer::new(2); 
-    pub const FOOD_COLOR: Color = Color::GREEN;
-
-    pub fn new(config: SimulationConfig) -> Self {
+    /// Create a simulation with a space of the given dimensions
+    pub fn new(size: Vector2) -> Self {
+        let mut collision_matrix = CollisionMatrix::new();
+        collision_matrix.insert(Blob::LAYER, physics::LayerMask::new(vec![Food::LAYER, Blob::LAYER]));
+        collision_matrix.insert(Food::LAYER, physics::LayerMask::empty());
+        collision_matrix.insert(Blob::SIGHT_LAYER, physics::LayerMask::new(vec![Food::LAYER, Blob::LAYER]));
         Self {
-            config,
+            size,
             blobs: KeyedSet::new(),
             foods: KeyedSet::new(),
-            physics: physics::World::new([
-                (Self::BLOB_LAYER, physics::LayerMask::new([Self::FOOD_LAYER].iter().cloned())),
-                (Self::FOOD_LAYER, physics::LayerMask::new([Self::BLOB_LAYER].iter().cloned())),
-                (Self::SIGHT_LAYER, physics::LayerMask::new([Self::BLOB_LAYER, Self::FOOD_LAYER].iter().cloned())),
-            ].iter().cloned().collect()),
             objects: HashMap::new(),
+            physics: physics::World::new(collision_matrix),
         }
     }
 
-    pub fn step(&mut self, draw: &mut DrawingContext, timestep: f32) {
+    /// Returns the size of the simulation's space
+    pub fn size(&self) -> Vector2 { self.size }
+
+    /// Draw the simulation data onto a buffer.
+    pub fn draw(&self, draw: &mut DrawingContext) {
+        //  background
+        draw.clear_background(Color::RAYWHITE);
+        //  foods
+        for (_, food) in &self.foods {
+            food.draw(draw);
+        }
+        //  blobs
+        for (_, blob) in &self.blobs {
+            blob.draw(draw);
+        }
+    }
+
+    /// Advance the simulation by a single iteration.
+    ///
+    /// The timestep is the fraction of seconds that has passed
+    /// since the last step in the simulation.
+    /// The step will be more accurate as the timestep is closer
+    /// to 0.
+    pub fn step(&mut self, timestep: f32) {
         debug_assert!(timestep >= 0.);
 
         //  run collision detection
         let collisions = self.physics.collisions();
 
-        //  draw foods
-        for (_, food) in &self.foods {
-            debug_assert!(!food.x.is_nan() && !food.y.is_nan());
-            draw.draw_circle_v(food, 10f32, Self::FOOD_COLOR);
-        }
-        
-        //  draw blobs
-        for (_, blob) in &self.blobs {
-            debug_assert!(!blob.pos.x.is_nan() && !blob.pos.y.is_nan());
-            debug_assert!(!blob.direction.x.is_nan() && !blob.direction.y.is_nan());
-            blob.draw(draw);
-        }
-
         //  prepare blob steps
         let mut steps = HashMap::new();
         for (key, blob) in &self.blobs {
-            let seen: Vec<(physics::CircleKey, Color)> = match collisions.get(&blob.sight_circle) {
-                None => vec![],
-                Some(collided) => collided
-                    .iter()
-                    .filter(|&&key| {
-                        let circle = self.physics.get(key).unwrap();
-                        let dir = circle.center - blob.pos;
+            let seen: Vec<(&CircleObject, &Color, &Vector2)> = 
+                collisions.get(&blob.sight_circle)
+                .map_or_else(|| vec![], |collided| 
+                    collided.iter()
+                    .filter_map(|&key| {
+                        let circle = self.physics.circles.get(key).unwrap();
+                        let circle_object = self.objects.get(&key).unwrap();
+                        let dir = circle.center - blob.pos();
+                        //  make sure object inside blob POV 
                         let mut angle = dir.angle_to(blob.direction).to_degrees().abs();
                         if angle > 180. { angle -= 180. }
-                        angle <= blob.pov
+                        if angle > blob.pov { return None; }
+
+                        let color = circle_object.color(self)?;
+                        Some((circle_object, color, &circle.center))
                     })
-                    .map(|&key| {
-                        (key, self.objects[&key].color(&self.blobs))
-                    })
-                    .collect(),
-            };
-            steps.insert(*key, blob.prepare_step(seen.as_slice(), &self.physics));
+                    .collect()
+                );
+            steps.insert(*key, blob.prepare_step(seen));
         }
 
         //  step blobs
@@ -163,73 +161,136 @@ impl Simulation {
         }
     }
 
-    pub fn add_random_blob(&mut self) {
-        let blob = Blob::new_random(&self.config.size, &mut self.physics);
-        //  copy the keys before moving blob into blobs
-        let circle = blob.circle;   
-        let sight = blob.sight_circle;   
+    /// Put a blob in the simulation.
+    pub fn insert_blob(&mut self, 
+        pos: Vector2, radius: f32, color: Color,
+        speed: f32, rotation_speed: f32,
+        pov: f32, sight_depth: f32,
+        favorite_color: Color,
+        color_attraction: f32, color_repulsion: f32,
+    ) -> Key<Blob> {
+        //  create blob
+        let circle = self.physics.circles.insert(Circle {
+            center: pos, radius: radius, layer: Blob::LAYER,
+        });
+        let sight_circle = self.physics.circles.insert(Circle {
+            center: pos, radius: sight_depth, layer: Blob::SIGHT_LAYER,
+        });
+        let blob = Blob {
+            pos, radius, color,
+            speed, rotation_speed,
+            pov, sight_depth,
+            favorite_color,
+            color_attraction, color_repulsion,
+            direction: Vector2::zero(),
+            circle, sight_circle,
+        };
+        //  insert blob data
+        let key = self.blobs.insert(blob);
+        self.objects.insert(circle, CircleObject::Blob(key));
+        self.objects.insert(sight_circle, CircleObject::BlobSight(key));
 
-        let blob_key = self.blobs.insert(blob);
-        self.objects.insert(circle, CircleObject::Blob(blob_key));
-        self.objects.insert(sight, CircleObject::BlobSight(blob_key));
+        key
+    }
+    
+    /// Get a blob from the simulation.
+    pub fn get_blob(&self, blob: Key<Blob>) -> Option<&Blob> {
+        self.blobs.get(blob)
+    }
+    /// Get a blob from the simulation.
+    pub fn get_blob_mut(&mut self, blob: Key<Blob>) -> Option<&mut Blob> {
+        self.blobs.get_mut(blob)
+    }
+    
+    /// Remove a blob from the simulation.
+    pub fn remove_blob(&mut self, blob: Key<Blob>) -> Option<Blob> {
+        //  try remove blob
+        let blob = self.blobs.remove(blob);
+        //  remove blob objects
+        if let Some(blob) = &blob {
+            self.objects.remove(&blob.circle);
+            self.objects.remove(&blob.sight_circle);
+        }
+
+        blob
     }
 
-    pub fn add_random_food(&mut self) {
-        let pos = Vector2 {
-            x: random::<f32>() * self.config.size.x as f32,
-            y: random::<f32>() * self.config.size.y as f32,
-        };
-        let key = self.foods.insert(pos);
-        let circle_key = self.physics.insert(physics::Circle {
-            center: pos,
-            radius: 10f32,
-            layer: Self::FOOD_LAYER,
+    /// Put a food in the simulation.
+    pub fn insert_food(&mut self, pos: Vector2) -> Key<Food> {
+        //  create food
+        let circle = self.physics.circles.insert(Circle {
+            center: pos, radius: Food::RADIUS, layer: Food::LAYER,
         });
-        self.objects.insert(circle_key, CircleObject::Food(key));
+        let food = Food { pos, circle };
+        //  insert data
+        let key = self.foods.insert(food);
+        self.objects.insert(circle, CircleObject::Food(key));
+        
+        key
+    }
+    
+    /// Get a food from the simulation.
+    pub fn get_food(&self, food: Key<Food>) -> Option<&Food> {
+        self.foods.get(food)
+    }
+    /// Get a food from the simulation.
+    pub fn get_food_mut(&mut self, food: Key<Food>) -> Option<&mut Food> {
+        self.foods.get_mut(food)
+    }
+    
+    /// Remove a food from the simulation.
+    pub fn remove_food(&mut self, food: Key<Food>) -> Option<Food> {
+        //  try remove food
+        let food = self.foods.remove(food);
+        //  remove food objects
+        if let Some(food) = &food {
+            self.objects.remove(&food.circle);
+        }
+
+        food
     }
 }
 
-#[derive(Debug)]
 pub struct BlobStep {
-    new_direction: Vector2,
+    target_direction: Option<Vector2>,
 }
 
 impl Blob {
-    pub fn new_random(world_size: &Vector2, world: &mut physics::World) -> Self {
-        let rad = 20. * random::<f32>();
-        let pos = Vector2 {
-            x: random::<f32>() * world_size.x as f32,
-            y: random::<f32>() * world_size.y as f32,
-        };
-        let sight_depth = 70f32 * random::<f32>();
-        let circle = world.insert(physics::Circle { radius: rad, center: pos, layer: Simulation::BLOB_LAYER });
-        let sight_circle = world.insert(physics::Circle { radius: sight_depth, center: pos, layer: Simulation::SIGHT_LAYER });
-        Self {
-            speed: 120. * random::<f32>(),
-            rotation_speed: 5. * random::<f32>(),
-            rad,
-            color: Color::new(random(), random(), random(), 255),
-            sight_depth, 
-            pov: 180f32 * random::<f32>(), 
-            
-            favorite_color: Color::new(random(), random(), random(), 255),
-            color_attraction: random::<f32>(),
-            color_repulsion: random::<f32>(),
+    pub const LAYER: physics::Layer = physics::Layer::new(0);
+    pub const SIGHT_LAYER: physics::Layer = physics::Layer::new(1);
 
-            pos,
-            direction: Vector2 {
-                x: 2f32 * random::<f32>() - 1f32,
-                y: 2f32 * random::<f32>() - 1f32,
-            }.normalized(),
-            circle,
-            sight_circle
-        }
+    pub fn pos(&self) -> Vector2 { self.pos }
+
+    pub fn set_pos(&mut self, world: &mut physics::World, value: Vector2) {
+        self.pos = value;
+        world.circles.get_mut(self.circle).unwrap().center = value;
+        world.circles.get_mut(self.sight_circle).unwrap().center = value;
     }
 
-    pub fn draw(&self, draw: &mut DrawingContext) {
-        //  drawing
-        draw.draw_circle_v(self.pos, self.rad, self.color);
+    pub fn radius(&self) -> f32 { self.radius }
 
+    pub fn set_radius(&mut self, world: &mut physics::World, value: f32) {
+        self.radius = value;
+        world.circles.get_mut(self.circle).unwrap().radius = value;    
+    }
+
+    pub fn direction(&self) -> Vector2 { self.direction }
+
+    pub fn set_direction(&mut self, _world: &mut physics::World, value: Vector2) {
+        self.direction = value;
+    }
+
+    pub fn sight_depth(&self) -> f32 { self.sight_depth }
+
+    pub fn set_sight_depth(&mut self, world: &mut physics::World, value: f32) {
+        self.sight_depth = value;
+        world.circles.get_mut(self.sight_circle).unwrap().radius = value;
+    }
+
+
+    pub fn draw(&self, draw: &mut DrawingContext) {
+        draw.draw_circle_v(self.pos, self.radius, self.color);
+        
         //  sight drawing
         let angle = self.direction.x.atan2(self.direction.y).to_degrees();
         draw.draw_circle_sector_lines(
@@ -243,38 +304,81 @@ impl Blob {
         draw.draw_line_v(self.pos, self.pos + self.direction * 3. * self.speed, self.favorite_color);
     }
 
-    pub fn prepare_step(&self, seen: &[(physics::CircleKey, Color)], world: &physics::World) -> BlobStep {
+    pub fn prepare_step<'a, I>(&self, seen: I) -> BlobStep
+    where I: std::iter::IntoIterator<Item=(&'a CircleObject, &'a Color, &'a Vector2)> {
 
         let mut sum = Vector2::zero();
         let mut count = 0.;
-        for (circle_key, color) in seen {
-            let circle = world.get(*circle_key).unwrap();
-            let v = color_dot(&self.favorite_color, color);
+        for (circle_object, color, pos) in seen {
+
+            let v = color_similarity(&self.favorite_color, color);
             let v = v * (if v > 0. { self.color_attraction } else { self.color_repulsion });
             
-            if (circle.center - self.pos).length_sqr() != 0. {
-                let target_dir = (circle.center - self.pos).normalized();
+            if (*pos - self.pos).length_sqr() != 0. {
+                let target_dir = (*pos - self.pos).normalized();
                 sum += target_dir * v; 
                 count += v.abs();
             }
         }
         
-        let new_dir = if count == 0. || sum.length_sqr() == 0. { self.direction } else {
-            (sum / count as f32).normalized()
+        let target_direction = if count == 0. || sum.length_sqr() == 0. {
+            None
+        } else {
+            let d = (sum / count as f32).normalized();
+            Some(d)
         };
 
-        BlobStep { new_direction: new_dir }
+        BlobStep { target_direction }
     }
 
-    pub fn step<'a>(&mut self, step: &BlobStep, timestep: f32, world: &mut physics::World) {
-
+    pub fn step(&mut self, step: &BlobStep, timestep: f32, physics_world: &mut physics::World) {
+        
         //  update direction
-        let t = self.rotation_speed * timestep;
-        self.direction = (step.new_direction * t + self.direction * (1. - t)).normalized();
+        if let Some(target_direction) = step.target_direction {
+            let t = self.rotation_speed * timestep;
+            self.direction = (target_direction * t + self.direction * (1. - t)).normalized();
+        } else if self.direction == Vector2::zero() {
+            self.direction = random_vector2() * 2. - 1.;
+        }
 
         //  move position
         self.pos += self.direction * self.speed * timestep;
-        world.get_mut(self.circle).unwrap().center = self.pos;
-        world.get_mut(self.sight_circle).unwrap().center = self.pos;
+        physics_world.circles.get_mut(self.circle).unwrap().center = self.pos;
+        physics_world.circles.get_mut(self.sight_circle).unwrap().center = self.pos;
     }
+}
+
+impl Food {
+    pub const LAYER: physics::Layer = physics::Layer::new(2);
+    pub const COLOR: Color = Color::GREEN;
+    pub const RADIUS: f32 = 5.;
+
+    pub fn pos(&self) -> Vector2 { self.pos }
+
+    fn circle_mut<'a>(&self, physics_world: &'a mut physics::World) -> &'a mut Circle {
+        physics_world.circles.get_mut(self.circle).unwrap()
+    }
+
+    pub fn set_pos(&mut self, physics_world: &mut physics::World, value: Vector2) {
+        self.pos = value;
+        self.circle_mut(physics_world).center = value;
+    }
+
+    pub fn draw(&self, draw: &mut DrawingContext) {
+        draw.draw_circle_v(self.pos, Self::RADIUS, Self::COLOR);
+    }
+}
+
+impl CircleObject {
+    pub fn color<'a>(&self, sim: &'a Simulation) -> Option<&'a Color> {
+        match *self {
+            Self::Blob(blob) => sim.get_blob(blob).map(|x| &x.color),
+            Self::Food(food) => Some(&Food::COLOR),
+            Self::BlobSight(_) => None,
+        }
+    }
+}
+
+pub mod prelude {
+    pub use super::*;
 }

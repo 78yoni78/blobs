@@ -4,6 +4,7 @@ use raylib::prelude::*;
 
 use crate::keyed_set::prelude::*;
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Layer(u32);
 
@@ -44,15 +45,12 @@ pub struct Circle {
     pub layer: Layer,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CircleKey(Key);
-
-pub type CircleCollisions = HashMap<CircleKey, Vec<CircleKey>>;
+pub type CircleCollisions = HashMap<Key<Circle>, Vec<Key<Circle>>>;
 
 pub type CollisionMatrix = HashMap<Layer, LayerMask>;
 
 pub struct World {
-    circles: KeyedSet<Circle>,    
+    pub circles: KeyedSet<Circle>,    
     collision_matrix: CollisionMatrix,
 }
 
@@ -72,22 +70,6 @@ impl World {
         Self { circles: KeyedSet::new(), collision_matrix }
     }
 
-    pub fn insert(&mut self, circle: Circle) -> CircleKey {
-        CircleKey(self.circles.insert(circle))
-    }
-
-    pub fn get(&self, key: CircleKey) -> Option<&Circle> {
-        self.circles.get(key.0)
-    }
-
-    pub fn get_mut(&mut self, key: CircleKey) -> Option<&mut Circle> {
-        self.circles.get_mut(key.0)
-    }
-
-    pub fn remove(&mut self, key: CircleKey) -> Option<Circle> {
-        self.circles.remove(key.0)
-    }
-
     fn layers_collide(collision_matrix: &CollisionMatrix, left: &Circle, right: &Circle) -> bool {
         match collision_matrix.get(&left.layer) {
             None => true,
@@ -95,7 +77,7 @@ impl World {
         }
     }
 
-    fn collisions_naive<'a>(collision_matrix: &CollisionMatrix, circles: &Vec<(CircleKey, &'a Circle)>) -> CircleCollisions {
+    fn collisions_naive<'a>(collision_matrix: &CollisionMatrix, circles: &Vec<(Key<Circle>, &'a Circle)>) -> CircleCollisions {
         let mut ret = CircleCollisions::new();
         for &(key, circle) in circles {
             let mut collided = vec![];
@@ -120,9 +102,9 @@ impl World {
         if self.circles.len() == 0 { return CircleCollisions::new() }
 
         //  sort by x axis
-        let mut circles: Vec<(CircleKey, &Circle)> = self.circles
+        let mut circles: Vec<(Key<Circle>, &Circle)> = self.circles
             .iter()
-            .map(|tuple| (CircleKey(*tuple.0), tuple.1))
+            .map(|tuple| (*tuple.0, tuple.1))
             .collect();
         //  this line will not work because the sort-key is a vector
         //circles.sort_by_key(|circle| circle.center.x);
@@ -161,15 +143,15 @@ mod tests {
     #[test]
     fn test_2_body_collision() {
         let mut w = World::new(CollisionMatrix::new());
-        let a = w.insert(Circle { center: Vector2::new(5., 4.), radius: 2., layer: Layer::new(0) } );
-        let b = w.insert(Circle { center: Vector2::new(6., 6.), radius: 1., layer: Layer::new(0) } );
+        let a = w.circles.insert(Circle { center: Vector2::new(5., 4.), radius: 2., layer: Layer::new(0) } );
+        let b = w.circles.insert(Circle { center: Vector2::new(6., 6.), radius: 1., layer: Layer::new(0) } );
         
         assert_eq!(w.collisions(), [
             (a, vec![b]),
             (b, vec![a]),
         ].iter().cloned().collect());
 
-        w.get_mut(b).unwrap().center.x += 2.;
+        w.circles.get_mut(b).unwrap().center.x += 2.;
         
         assert_eq!(w.collisions(), [].iter().cloned().collect());
     }
@@ -177,9 +159,9 @@ mod tests {
     #[test]
     fn test_3_body_collision() {
         let mut w = World::new(CollisionMatrix::new());
-        let a = w.insert(Circle { center: Vector2::new(5., 4.), radius: 2., layer: Layer::new(0) } );
-        let b = w.insert(Circle { center: Vector2::new(7., 6.), radius: 1., layer: Layer::new(0) } );
-        let c = w.insert(Circle { center: Vector2::new(3., 7.), radius: 2., layer: Layer::new(0) } );
+        let a = w.circles.insert(Circle { center: Vector2::new(5., 4.), radius: 2., layer: Layer::new(0) } );
+        let b = w.circles.insert(Circle { center: Vector2::new(7., 6.), radius: 1., layer: Layer::new(0) } );
+        let c = w.circles.insert(Circle { center: Vector2::new(3., 7.), radius: 2., layer: Layer::new(0) } );
         
         assert_eq!(w.collisions(), [
             (a, vec![c, b]),
@@ -187,7 +169,7 @@ mod tests {
             (c, vec![a]),
         ].iter().cloned().collect());
 
-        w.get_mut(c).unwrap().radius += 2.;
+        w.circles.get_mut(c).unwrap().radius += 2.;
         
         assert_eq!(w.collisions(), [
             (a, vec![c, b]),
@@ -200,7 +182,6 @@ mod tests {
 pub mod prelude {
     pub use super::{
         Circle,
-        CircleKey,
         CollisionMatrix,
     };
 }
