@@ -62,6 +62,9 @@ pub struct Blob {
     pub direction: Vector2,
     circle: Key<Circle>,
     sight_circle: Key<Circle>,
+
+    pub hunger: f32,
+    pub max_hunger: f32,
 }
 
 #[derive(Debug)]
@@ -156,11 +159,12 @@ impl Simulation {
 
         //  remove foods
         let mut to_remove = HashSet::new();
-        for (_, blob) in &self.blobs {
+        for (_, blob) in &mut self.blobs {
             if let Some(touched) = collisions.get(&blob.circle) {
                 for circle in touched {
                     if let Some(&CircleObject::Food(food)) = self.objects.get(circle) {
                         to_remove.insert(food);
+                        blob.hunger = 0.;
                     }
                 }
             }
@@ -174,6 +178,17 @@ impl Simulation {
         for (key, blob) in &mut self.blobs {
             blob.step(&steps[key], timestep, world);
         }
+
+        //  remove blobs
+        let mut to_remove = HashSet::new();
+        for (key, blob) in &self.blobs {
+            if blob.hunger > blob.max_hunger {
+                to_remove.insert(*key);
+            }
+        }
+        for key in to_remove {
+            self.remove_blob(key);
+        }
     }
 
     /// Put a blob in the simulation.
@@ -183,6 +198,7 @@ impl Simulation {
         pov: f32, sight_depth: f32,
         favorite_color: Color,
         color_attraction: f32, color_repulsion: f32,
+        max_hunger: f32,
     ) -> Key<Blob> {
         //  create blob
         let circle = self.physics.circles.insert(Circle {
@@ -199,6 +215,7 @@ impl Simulation {
             color_attraction, color_repulsion,
             direction: Vector2::zero(),
             circle, sight_circle,
+            max_hunger, hunger: 0.,
         };
         //  insert blob data
         let key = self.blobs.insert(blob);
@@ -307,7 +324,7 @@ impl Blob {
 
 
     pub fn draw(&self, draw: &mut DrawingContext) {
-        draw.draw_circle_v(self.pos, self.radius, self.color);
+        draw.draw_circle_v(self.pos, self.radius, self.color.fade(1. - self.hunger / self.max_hunger));
         
         //  sight drawing
         let angle = self.direction.x.atan2(self.direction.y).to_degrees();
@@ -363,6 +380,9 @@ impl Blob {
         self.pos += self.direction * self.speed * timestep;
         physics_world.circles.get_mut(self.circle).unwrap().center = self.pos;
         physics_world.circles.get_mut(self.sight_circle).unwrap().center = self.pos;
+        
+        //  do hunger
+        self.hunger += timestep;
     }
 }
 

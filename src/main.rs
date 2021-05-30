@@ -29,6 +29,7 @@ fn add_random_blob(sim: &mut Simulation) -> keyed_set::Key<Blob> {
         random_color(),
         random(),
         random(),
+        25. * random::<f32>()
     )
 }
 
@@ -38,8 +39,8 @@ fn add_random_food(sim: &mut Simulation) -> keyed_set::Key<Food> {
 
 fn main() {
     //  options
-    let start_blobs = 20;
-    let start_foods = 200;
+    let start_blobs = 50;
+    let start_foods = 1000;
     let simulation_config = Vector2::new(1040f32, 680f32);
     let window_config = WindowConfig {
         width: 1040,
