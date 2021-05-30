@@ -309,7 +309,7 @@ impl Blob {
 
         let mut sum = Vector2::zero();
         let mut count = 0.;
-        for (circle_object, color, pos) in seen {
+        for (_, color, pos) in seen {
 
             let v = color_similarity(&self.favorite_color, color);
             let v = v * (if v > 0. { self.color_attraction } else { self.color_repulsion });
@@ -373,7 +373,7 @@ impl CircleObject {
     pub fn color<'a>(&self, sim: &'a Simulation) -> Option<&'a Color> {
         match *self {
             Self::Blob(blob) => sim.get_blob(blob).map(|x| &x.color),
-            Self::Food(food) => Some(&Food::COLOR),
+            Self::Food(_) => Some(&Food::COLOR),
             Self::BlobSight(_) => None,
         }
     }
