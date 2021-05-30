@@ -19,7 +19,7 @@
 //! sim.insert_blob(Blob::new());
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rand::prelude::*;
 
@@ -154,6 +154,21 @@ impl Simulation {
             steps.insert(*key, blob.prepare_step(seen));
         }
 
+        //  remove foods
+        let mut to_remove = HashSet::new();
+        for (_, blob) in &self.blobs {
+            if let Some(touched) = collisions.get(&blob.circle) {
+                for circle in touched {
+                    if let Some(&CircleObject::Food(food)) = self.objects.get(circle) {
+                        to_remove.insert(food);
+                    }
+                }
+            }
+        }
+        for food in to_remove {
+            self.remove_food(food);
+        }
+
         //  step blobs
         let world = &mut self.physics;
         for (key, blob) in &mut self.blobs {
@@ -210,6 +225,8 @@ impl Simulation {
         if let Some(blob) = &blob {
             self.objects.remove(&blob.circle);
             self.objects.remove(&blob.sight_circle);
+            self.physics.circles.remove(blob.circle);
+            self.physics.circles.remove(blob.sight_circle);
         }
 
         blob
@@ -245,6 +262,7 @@ impl Simulation {
         //  remove food objects
         if let Some(food) = &food {
             self.objects.remove(&food.circle);
+            self.physics.circles.remove(food.circle);
         }
 
         food
