@@ -39,6 +39,8 @@ fn add_random_food(sim: &mut Simulation) -> keyed_set::Key<Food> {
 
 fn main() {
     //  options
+    let food_add_delay = time::Duration::from_secs_f32(0.01);
+    let blob_add_delay = time::Duration::from_secs_f32(5.0);
     let start_blobs = 50;
     let start_foods = 1000;
     let simulation_config = Vector2::new(1040f32, 680f32);
@@ -50,7 +52,9 @@ fn main() {
 
     //  allocate resources
     let mut sim = Simulation::new(simulation_config);
-    let mut window = Window::new(&window_config); 
+    let mut window = Window::new(&window_config);
+    let mut food_add_time = time::Instant::now(); 
+    let mut blob_add_time = time::Instant::now(); 
     
     //  initialize simulation
     for _ in 0..start_blobs {
@@ -71,6 +75,17 @@ fn main() {
         draw.clear_background(Color::WHITE);
         sim.draw(&mut draw);
         sim.step(delta_time);
+
+        //  add blob
+        if frame_time > blob_add_time {
+            blob_add_time = frame_time + blob_add_delay;
+            add_random_blob(&mut sim);            
+        }
+        //  add food
+        if frame_time > food_add_time {
+            food_add_time = frame_time + food_add_delay;
+            add_random_food(&mut sim);
+        }
 
         if draw.is_mouse_button_pressed(MouseButton::MOUSE_LEFT_BUTTON) {
             add_random_blob(&mut sim);
