@@ -23,8 +23,8 @@ use crate::{
 fn random_vector2() -> Vector2 { Vector2::new(random(), random()) }
 fn random_color() -> Color { Color::new(random(), random(), random(), 255) }
 
-fn add_random_blob(sim: &mut Simulation) -> keyed_set::Key<Blob> {
-    sim.insert_blob(
+fn add_random_blob(sim: &mut Simulation, names: &mut Vec<String>) -> keyed_set::Key<Blob> {
+    let key = sim.insert_blob(
         random_vector2() * sim.size(),
         20. * random::<f32>(),
         random_color(),
@@ -38,7 +38,10 @@ fn add_random_blob(sim: &mut Simulation) -> keyed_set::Key<Blob> {
         25. * random::<f32>(),
         random::<f32>(),
         2. * random::<f32>(),
-    )
+    );
+    let name = names.choose(&mut rand::thread_rng()).unwrap().to_string();
+    sim.get_blob_mut(key).unwrap().name = Some(name);
+    key
 }
 
 fn add_random_food(sim: &mut Simulation) -> keyed_set::Key<Food> {
@@ -71,8 +74,7 @@ fn main() {
     
     //  initialize simulation
     for _ in 0..start_blobs {
-        let blob_key = add_random_blob(&mut sim);
-        sim.get_blob_mut(blob_key).unwrap().name = Some(names.choose(&mut rand::thread_rng()).unwrap().clone());
+        let blob_key = add_random_blob(&mut sim, &mut names);
     }
     //  initialize simulation
     for _ in 0..start_foods {
@@ -93,8 +95,7 @@ fn main() {
         //  add blob
         if frame_time > blob_add_time {
             blob_add_time = frame_time + blob_add_delay;
-            let blob_key = add_random_blob(&mut sim);
-            sim.get_blob_mut(blob_key).unwrap().name = Some(names.choose(&mut rand::thread_rng()).unwrap().clone());
+            let blob_key = add_random_blob(&mut sim, &mut names);
         }
         //  add food
         if frame_time > food_add_time {
@@ -103,8 +104,7 @@ fn main() {
         }
 
         if draw.is_mouse_button_pressed(MouseButton::MOUSE_LEFT_BUTTON) {
-            let blob_key = add_random_blob(&mut sim);
-            sim.get_blob_mut(blob_key).unwrap().name = Some(names.choose(&mut rand::thread_rng()).unwrap().clone());
+            let blob_key = add_random_blob(&mut sim, &mut names);
         }
     });
 }
