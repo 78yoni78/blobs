@@ -46,7 +46,9 @@ fn color_similarity(a: &Color, b: &Color) -> f32 {
 }
 
 #[derive(Debug)]
-pub struct Blob {    
+pub struct Blob {
+    pub name: Option<String>,
+
     pub speed: f32,
     pub rotation_speed: f32,
     radius: f32,
@@ -176,18 +178,19 @@ impl Simulation {
         //  step blobs
         let world = &mut self.physics;
         for (key, blob) in &mut self.blobs {
-            blob.step(&steps[key], timestep, world);
+            blob.step(&steps[key], timestep, world, self.size);
         }
 
         //  remove blobs
-        let mut to_remove = HashSet::new();
+        let mut to_remove = HashMap::new();
         for (key, blob) in &self.blobs {
             if blob.hunger > blob.max_hunger {
-                to_remove.insert(*key);
+                to_remove.insert(*key, blob.pos());
             }
         }
-        for key in to_remove {
+        for (key, pos) in to_remove {
             self.remove_blob(key);
+            self.insert_food(pos);
         }
     }
 
@@ -208,6 +211,7 @@ impl Simulation {
             center: pos, radius: sight_depth, layer: Blob::SIGHT_LAYER,
         });
         let blob = Blob {
+            name: None,
             pos, radius, color,
             speed, rotation_speed,
             pov, sight_depth,
@@ -322,21 +326,33 @@ impl Blob {
         world.circles.get_mut(self.sight_circle).unwrap().radius = value;
     }
 
+    fn fade_color(&self, color: &Color) -> Color {
+        color.fade(1. - self.hunger / self.max_hunger)
+    }
 
     pub fn draw(&self, draw: &mut DrawingContext) {
-        draw.draw_circle_v(self.pos, self.radius, self.color.fade(1. - self.hunger / self.max_hunger));
+
+        draw.draw_circle_v(self.pos, self.radius, self.fade_color(&self.color));
         
-        //  sight drawing
-        let angle = self.direction.x.atan2(self.direction.y).to_degrees();
-        draw.draw_circle_sector_lines(
-            self.pos,                       //  start
-            self.sight_depth,               //  radius
-            (angle - self.pov / 2.) as i32, //  start_angle
-            (angle + self.pov / 2.) as i32, //  end_angle
-            25,                             //  segments
-            self.favorite_color,            //  color
-        );
-        draw.draw_line_v(self.pos, self.pos + self.direction * 3. * self.speed, self.favorite_color);
+        if let Some(name) = &self.name {
+            draw.draw_text(name,
+                (self.pos().x - self.radius()) as i32,
+                (self.pos().y - self.radius() - 20.) as i32,
+                20, self.fade_color(&self.favorite_color),
+            );
+        }
+
+        // //  sight drawing
+        // let angle = self.direction.x.atan2(self.direction.y).to_degrees();
+        // draw.draw_circle_sector_lines(
+        //     self.pos,                       //  start
+        //     self.sight_depth,               //  radius
+        //     (angle - self.pov / 2.) as i32, //  start_angle
+        //     (angle + self.pov / 2.) as i32, //  end_angle
+        //     25,                             //  segments
+        //     self.favorite_color,            //  color
+        // );
+        // draw.draw_line_v(self.pos, self.pos + self.direction * 3. * self.speed, self.favorite_color);
     }
 
     pub fn prepare_step<'a, I>(&self, seen: I) -> BlobStep
@@ -366,7 +382,7 @@ impl Blob {
         BlobStep { target_direction }
     }
 
-    pub fn step(&mut self, step: &BlobStep, timestep: f32, physics_world: &mut physics::World) {
+    pub fn step(&mut self, step: &BlobStep, timestep: f32, physics_world: &mut physics::World, world_size: Vector2) {
         
         //  update direction
         if let Some(target_direction) = step.target_direction {
@@ -383,6 +399,24 @@ impl Blob {
         
         //  do hunger
         self.hunger += timestep;
+
+        //  do border
+        if self.pos().x > world_size.x {
+            self.set_pos(physics_world, Vector2::new(world_size.x, self.pos().y));
+            self.set_direction(physics_world, Vector2::new(-self.direction().x, self.direction().y));
+        }
+        if self.pos().y > world_size.y {
+            self.set_pos(physics_world, Vector2::new(self.pos().x, world_size.y));
+            self.set_direction(physics_world, Vector2::new(self.direction().x, -self.direction().y));
+        }
+        if self.pos().x < 0. {
+            self.set_pos(physics_world, Vector2::new(0., self.pos().y));
+            self.set_direction(physics_world, Vector2::new(-self.direction().x, self.direction().y));
+        }
+        if self.pos().y < 0. {
+            self.set_pos(physics_world, Vector2::new(self.pos().x, 0.));
+            self.set_direction(physics_world, Vector2::new(self.direction().x, -self.direction().y));
+        }
     }
 }
 
