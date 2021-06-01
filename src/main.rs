@@ -2,6 +2,7 @@ mod keyed_set;
 mod window;
 mod physics;
 mod simulation;
+mod math;
 
 use std::{
     time,
