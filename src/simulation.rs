@@ -25,7 +25,12 @@ use rand::prelude::*;
 
 use raylib::prelude::*;
 
-use crate::{keyed_set::prelude::*, physics::{self, prelude::*}, window::DrawingContext};
+use crate::{
+    keyed_set::prelude::*,
+    physics::{self, prelude::*},
+    window::DrawingContext,
+    math,
+};
 
 
 /// Returns a vector2 with x in [0,1) and y in [0,1)
@@ -154,8 +159,7 @@ impl Simulation {
                         let circle_object = self.objects.get(&key).unwrap();
                         let dir = circle.center - blob.pos();
                         //  make sure object inside blob POV 
-                        let mut angle = dir.angle_to(blob.direction).to_degrees().abs();
-                        if angle > 180. { angle -= 180. }
+                        let angle = math::unsigned_angle_vector2(dir, blob.direction).abs();
                         if angle > blob.pov { return None; }
 
                         let color = circle_object.color(self)?;
@@ -377,7 +381,7 @@ impl Blob {
         }
 
         //  draw time
-        draw.draw_text(&format!("{:.2}", self.alive_time),
+        draw.draw_text(&format!("{:.1}", self.alive_time),
             (self.pos().x - self.radius()) as i32,
             (self.pos().y - self.radius() - 20.) as i32,
             20, self.fade_color(&self.favorite_color),
@@ -426,12 +430,13 @@ impl Blob {
     pub fn step(&mut self, step: &BlobStep, timestep: f32, physics_world: &mut physics::World, world_size: Vector2) {
         
         //  update direction
-        if let Some(target_direction) = step.target_direction {
-            let t = self.rotation_speed * timestep;
-            self.direction = (target_direction * t + self.direction * (1. - t)).normalized();
-        } else if self.direction == Vector2::zero() {
+        if self.direction == Vector2::zero() {
             self.direction = random_vector2() * 2. - 1.;
         }
+        else if let Some(target_direction) = step.target_direction {
+            let t = self.rotation_speed * timestep;
+            self.direction = math::slerp(self.direction, target_direction, t);
+        } 
 
         //  move position
         self.pos += self.direction * self.speed * timestep;
