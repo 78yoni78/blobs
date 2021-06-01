@@ -3,9 +3,14 @@ mod window;
 mod physics;
 mod simulation;
 
-use std::time;
+use std::{
+    time,
+    io,
+    fs,
+    path,
+};
 
-use rand::random;
+use rand::{random, seq::SliceRandom};
 
 use raylib::prelude::*;
 
@@ -25,7 +30,7 @@ fn add_random_blob(sim: &mut Simulation) -> keyed_set::Key<Blob> {
         120. * random::<f32>(),
         5. * random::<f32>(),
         180f32 * random::<f32>(),
-        70f32 * random::<f32>(),
+        170f32 * random::<f32>(),
         random_color(),
         random(),
         random(),
@@ -37,28 +42,34 @@ fn add_random_food(sim: &mut Simulation) -> keyed_set::Key<Food> {
     sim.insert_food(random_vector2() * sim.size())
 }
 
+fn read_names<P: AsRef<path::Path> + ?Sized>(path: &P) -> io::Result<Vec<String>> {
+    let content = fs::read_to_string(path)?;
+    Ok(content.split_whitespace().map(|x| x.to_string()).collect())
+}  
+
 fn main() {
     //  options
-    let food_add_delay = time::Duration::from_secs_f32(0.01);
-    let blob_add_delay = time::Duration::from_secs_f32(5.0);
-    let start_blobs = 50;
-    let start_foods = 1000;
-    let simulation_config = Vector2::new(1040f32, 680f32);
+    let food_add_delay = time::Duration::from_secs_f32(0.2);
+    let blob_add_delay = time::Duration::from_secs_f32(10.);
+    let start_blobs = 10;
+    let start_foods = 100;
     let window_config = WindowConfig {
-        width: 1040,
+        width: 1300,
         height: 680,
         title: "Blobs",
     }; 
 
     //  allocate resources
-    let mut sim = Simulation::new(simulation_config);
     let mut window = Window::new(&window_config);
+    let mut sim = Simulation::new(Vector2::new(window.width() as f32, window.height() as f32));
     let mut food_add_time = time::Instant::now(); 
     let mut blob_add_time = time::Instant::now(); 
+    let mut names = read_names("names.txt").unwrap();
     
     //  initialize simulation
     for _ in 0..start_blobs {
-        add_random_blob(&mut sim);
+        let blob_key = add_random_blob(&mut sim);
+        sim.get_blob_mut(blob_key).unwrap().name = Some(names.choose(&mut rand::thread_rng()).unwrap().clone());
     }
     //  initialize simulation
     for _ in 0..start_foods {
@@ -79,7 +90,8 @@ fn main() {
         //  add blob
         if frame_time > blob_add_time {
             blob_add_time = frame_time + blob_add_delay;
-            add_random_blob(&mut sim);            
+            let blob_key = add_random_blob(&mut sim);
+            sim.get_blob_mut(blob_key).unwrap().name = Some(names.choose(&mut rand::thread_rng()).unwrap().clone());
         }
         //  add food
         if frame_time > food_add_time {
@@ -88,7 +100,8 @@ fn main() {
         }
 
         if draw.is_mouse_button_pressed(MouseButton::MOUSE_LEFT_BUTTON) {
-            add_random_blob(&mut sim);
+            let blob_key = add_random_blob(&mut sim);
+            sim.get_blob_mut(blob_key).unwrap().name = Some(names.choose(&mut rand::thread_rng()).unwrap().clone());
         }
     });
 }
