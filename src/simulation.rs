@@ -67,6 +67,9 @@ pub struct Blob {
 
     pub hunger: f32,
     pub max_hunger: f32,
+
+    pub attack: f32,
+    pub defence: f32,
 }
 
 #[derive(Debug)]
@@ -132,6 +135,9 @@ impl Simulation {
     pub fn step(&mut self, timestep: f32) {
         debug_assert!(timestep >= 0.);
 
+        let mut foods_to_remove = HashSet::new();
+        let mut blobs_to_remove = HashMap::new();
+
         //  run collision detection
         let collisions = self.physics.collisions();
 
@@ -159,20 +165,40 @@ impl Simulation {
             steps.insert(*key, blob.prepare_step(seen));
         }
 
-        //  remove foods
-        let mut to_remove = HashSet::new();
+        //  blobs eating
         for (_, blob) in &mut self.blobs {
             if let Some(touched) = collisions.get(&blob.circle) {
                 for circle in touched {
                     if let Some(&CircleObject::Food(food)) = self.objects.get(circle) {
-                        to_remove.insert(food);
+                        foods_to_remove.insert(food);
                         blob.hunger = 0.;
                     }
                 }
             }
         }
-        for food in to_remove {
-            self.remove_food(food);
+
+        //  blobs fighting
+        let mut fights = HashSet::new();
+        for (blob_key, blob) in &mut self.blobs {
+            if let Some(touched) = collisions.get(&blob.circle) {
+                for circle in touched {
+                    if let Some(&CircleObject::Blob(other_blob_key)) = self.objects.get(circle) {
+                        use std::cmp::{min, max};
+                        let a = min(*blob_key, other_blob_key);
+                        let b = max(*blob_key, other_blob_key);
+                        fights.insert((a, b));
+                    }
+                }
+            }
+        }
+        for (blob1_key, blob2_key) in fights {
+            let blob1 = self.blobs.get(blob1_key).unwrap();
+            let blob2 = self.blobs.get(blob2_key).unwrap();
+            for &(attacker, _attacker_key, defender, defender_key) in &[(blob1, blob1_key, blob2, blob2_key), (blob2, blob2_key, blob1, blob1_key)] {
+                if attacker.attack > defender.defence * (1. - defender.hunger / defender.max_hunger) {
+                    blobs_to_remove.insert(defender_key, defender.pos);
+                }
+            }
         }
 
         //  step blobs
@@ -181,15 +207,19 @@ impl Simulation {
             blob.step(&steps[key], timestep, world, self.size);
         }
 
-        //  remove blobs
-        let mut to_remove = HashMap::new();
+        //  blobs dying
         for (key, blob) in &self.blobs {
             if blob.hunger > blob.max_hunger {
-                to_remove.insert(*key, blob.pos());
+                blobs_to_remove.insert(*key, blob.pos());
             }
         }
-        for (key, pos) in to_remove {
-            self.remove_blob(key);
+        
+        //  remove
+        for food in foods_to_remove {
+            self.remove_food(food);
+        }
+        for (blob, pos) in blobs_to_remove {
+            self.remove_blob(blob);
             self.insert_food(pos);
         }
     }
@@ -202,6 +232,7 @@ impl Simulation {
         favorite_color: Color,
         color_attraction: f32, color_repulsion: f32,
         max_hunger: f32,
+        attack: f32, defence: f32,
     ) -> Key<Blob> {
         //  create blob
         let circle = self.physics.circles.insert(Circle {
@@ -220,6 +251,7 @@ impl Simulation {
             direction: Vector2::zero(),
             circle, sight_circle,
             max_hunger, hunger: 0.,
+            attack, defence,
         };
         //  insert blob data
         let key = self.blobs.insert(blob);

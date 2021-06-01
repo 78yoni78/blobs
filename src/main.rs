@@ -34,7 +34,9 @@ fn add_random_blob(sim: &mut Simulation) -> keyed_set::Key<Blob> {
         random_color(),
         random(),
         random(),
-        25. * random::<f32>()
+        25. * random::<f32>(),
+        random::<f32>(),
+        2. * random::<f32>(),
     )
 }
 
@@ -50,7 +52,7 @@ fn read_names<P: AsRef<path::Path> + ?Sized>(path: &P) -> io::Result<Vec<String>
 fn main() {
     //  options
     let food_add_delay = time::Duration::from_secs_f32(0.2);
-    let blob_add_delay = time::Duration::from_secs_f32(10.);
+    let blob_add_delay = time::Duration::from_secs_f32(0.5);
     let start_blobs = 10;
     let start_foods = 100;
     let window_config = WindowConfig {
