@@ -29,7 +29,7 @@ use std::{
 /// The lifetime of the key is the lifetime of the creating 
 /// `KeyedSet`. The time parameter is the element type of
 /// the `KeyedSet`.
-#[derive(Debug, PartialOrd, Ord)]
+#[derive(Debug)]
 pub struct Key<T>(usize, PhantomData<*const T>);
 
 impl<T> PartialEq for Key<T> {
@@ -53,6 +53,18 @@ impl<T> Clone for Key<T> {
 }
 
 impl<T> Copy for Key<T> {}
+
+impl<T> PartialOrd for Key<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl<T> Ord for Key<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
 
 /// A set of elements that are given unique keys.
 ///
