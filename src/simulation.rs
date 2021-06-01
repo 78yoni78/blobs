@@ -48,6 +48,7 @@ fn color_similarity(a: &Color, b: &Color) -> f32 {
 #[derive(Debug)]
 pub struct Blob {
     pub name: Option<String>,
+    pub alive_time: f32,
 
     pub speed: f32,
     pub rotation_speed: f32,
@@ -243,6 +244,7 @@ impl Simulation {
         });
         let blob = Blob {
             name: None,
+            alive_time: 0.,
             pos, radius, color,
             speed, rotation_speed,
             pov, sight_depth,
@@ -369,10 +371,17 @@ impl Blob {
         if let Some(name) = &self.name {
             draw.draw_text(name,
                 (self.pos().x - self.radius()) as i32,
-                (self.pos().y - self.radius() - 20.) as i32,
+                (self.pos().y - self.radius() - 2. * 20.) as i32,
                 20, self.fade_color(&self.favorite_color),
             );
         }
+
+        //  draw time
+        draw.draw_text(&format!("{:.2}", self.alive_time),
+            (self.pos().x - self.radius()) as i32,
+            (self.pos().y - self.radius() - 20.) as i32,
+            20, self.fade_color(&self.favorite_color),
+        );
 
         // //  sight drawing
         // let angle = self.direction.x.atan2(self.direction.y).to_degrees();
@@ -449,6 +458,9 @@ impl Blob {
             self.set_pos(physics_world, Vector2::new(self.pos().x, 0.));
             self.set_direction(physics_world, Vector2::new(self.direction().x, -self.direction().y));
         }
+
+        //  do time
+        self.alive_time += timestep;
     }
 }
 
