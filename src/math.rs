@@ -2,7 +2,7 @@ use raylib::prelude::*;
 
 pub use raylib::prelude::Vector3;
 
-fn unsigned_angle_vector2(a: Vector2, b: Vector2) -> f32 {
+pub fn unsigned_angle_vector2(a: Vector2, b: Vector2) -> f32 {
     let mut angle = a.angle_to(b).to_degrees().abs();
     if angle > 180. { angle -= 180. }
     angle
