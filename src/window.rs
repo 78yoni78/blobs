@@ -39,6 +39,8 @@ impl Window {
             draw(self.handle.begin_drawing(&self.thread));
         }
     }
+
+    pub fn handle(&self) -> &RaylibHandle { &self.handle }
 }
 
 pub mod prelude {
