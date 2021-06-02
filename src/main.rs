@@ -38,6 +38,8 @@ fn add_random_blob(sim: &mut Simulation, names: &mut Vec<String>) -> keyed_set::
         25. * random::<f32>(),
         random::<f32>(),
         2. * random::<f32>(),
+        0.5 * random::<f32>(),
+        random::<f32>(),
     );
     let name = names.choose(&mut rand::thread_rng()).unwrap().to_string();
     sim.get_blob_mut(key).unwrap().name = Some(name);

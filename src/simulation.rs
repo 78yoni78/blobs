@@ -73,6 +73,10 @@ pub struct Blob {
 
     pub hunger: f32,
     pub max_hunger: f32,
+    //  let h1 be the hunger after eating a food
+    //  h1 = max( (h0 - hunger_reduction*h_max) / (1 + hunger_division),  0 )
+    pub hunger_reduction: f32,
+    pub hunger_division: f32,
 
     pub attack: f32,
     pub defence: f32,
@@ -175,8 +179,7 @@ impl Simulation {
             if let Some(touched) = collisions.get(&blob.circle) {
                 for circle in touched {
                     if let Some(&CircleObject::Food(food)) = self.objects.get(circle) {
-                        foods_to_remove.insert(food);
-                        blob.hunger = 0.;
+                        blob.eat(&mut self.foods, food);
                     }
                 }
             }
@@ -238,6 +241,7 @@ impl Simulation {
         color_attraction: f32, color_repulsion: f32,
         max_hunger: f32,
         attack: f32, defence: f32,
+        hunger_reduction: f32, hunger_division: f32,
     ) -> Key<Blob> {
         //  create blob
         let circle = self.physics.circles.insert(Circle {
@@ -258,6 +262,7 @@ impl Simulation {
             circle, sight_circle,
             max_hunger, hunger: 0.,
             attack, defence,
+            hunger_reduction, hunger_division,
         };
         //  insert blob data
         let key = self.blobs.insert(blob);
@@ -368,23 +373,40 @@ impl Blob {
         color.fade(1. - self.hunger / self.max_hunger)
     }
 
+    fn feed(&mut self) { 
+        //  h1 = max( (h0 - hunger_reduction*h_max) / (1 + hunger_division),  0 )
+        self.hunger = f32::max(
+            (self.hunger - self.hunger_reduction * self.max_hunger)
+            /
+            (1. + self.hunger_division),
+            0.
+        );
+    }
+
+    pub fn eat(&mut self, foods: &mut KeyedSet<Food>, food: Key<Food>) {
+        self.feed();
+        foods.remove(food);
+    }
+
     pub fn draw(&self, draw: &mut DrawingContext) {
+
+        const FONT_HEIGHT: i32 = 20;
 
         draw.draw_circle_v(self.pos, self.radius, self.fade_color(&self.color));
         
         if let Some(name) = &self.name {
             draw.draw_text(name,
                 (self.pos().x - self.radius()) as i32,
-                (self.pos().y - self.radius() - 2. * 20.) as i32,
-                20, self.fade_color(&self.favorite_color),
+                (self.pos().y - self.radius() - 2. * FONT_HEIGHT as f32) as i32,
+                FONT_HEIGHT, self.fade_color(&self.favorite_color),
             );
         }
 
         //  draw time
         draw.draw_text(&format!("{:.1}", self.alive_time),
             (self.pos().x - self.radius()) as i32,
-            (self.pos().y - self.radius() - 20.) as i32,
-            20, self.fade_color(&self.favorite_color),
+            (self.pos().y - self.radius() - FONT_HEIGHT as f32) as i32,
+            FONT_HEIGHT, self.fade_color(&self.favorite_color),
         );
 
         // //  sight drawing
