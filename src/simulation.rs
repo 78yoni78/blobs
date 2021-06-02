@@ -299,9 +299,9 @@ impl Simulation {
         blob
     }
 
-    pub fn move_blob(&mut self, blob: Key<Blob>, amount: Vector2) {
+    pub fn set_blob_pos(&mut self, blob: Key<Blob>, pos: Vector2) {
         if let Some(blob) = self.blobs.get_mut(blob) {
-            blob.set_pos(&mut self.physics, blob.pos() + amount);
+            blob.set_pos(&mut self.physics, pos);
         }
     }
 

@@ -9,6 +9,7 @@ use std::{
     io,
     fs,
     path,
+    collections::HashMap,
 };
 
 use rand::{random, seq::SliceRandom};
@@ -55,6 +56,11 @@ fn read_names<P: AsRef<path::Path> + ?Sized>(path: &P) -> io::Result<Vec<String>
     Ok(content.split_whitespace().map(|x| x.to_string()).collect())
 }  
 
+struct Selection {
+    start_mouse_pos: Vector2,
+    blobs: HashMap<keyed_set::Key<Blob>, Vector2>,
+}
+
 fn main() {
     //  options
     let food_add_delay = time::Duration::from_secs_f32(0.2);
@@ -84,7 +90,7 @@ fn main() {
     }
 
     let mut last_frame_time = time::Instant::now();
-    let mut prev_mouse_position = window.handle().get_mouse_position();
+    let mut selection: Option<Selection> = None;
     window.draw_loop(|mut draw| {
         //  record time and calculate delta
         let frame_time = time::Instant::now();
@@ -111,12 +117,19 @@ fn main() {
         }
 
         if draw.is_mouse_button_down(MouseButton::MOUSE_LEFT_BUTTON) {
-            let (blobs, _foods) = sim.select(draw.get_mouse_position());
-            for blob in blobs {
-                sim.move_blob(blob, draw.get_mouse_position() - prev_mouse_position);
+            if let Some(selection) = &mut selection {
+                for (&blob_key, start_pos) in &selection.blobs {
+                    sim.set_blob_pos(blob_key, *start_pos + draw.get_mouse_position() - selection.start_mouse_pos);
+                }
+            } else {
+                let (blobs, _) = sim.select(draw.get_mouse_position());
+                selection = Some(Selection {
+                    start_mouse_pos: draw.get_mouse_position(),
+                    blobs: blobs.iter().map(|&blob_key| (blob_key, sim.get_blob(blob_key).unwrap().pos())).collect(),
+                });
             }
+        } else {
+            selection = None;
         }
-
-        prev_mouse_position = draw.get_mouse_position();
     });
 }
