@@ -100,16 +100,19 @@ pub struct Simulation {
     blobs: KeyedSet<Blob>,
     foods: KeyedSet<Food>,
     objects: HashMap<Key<Circle>, CircleObject>,
-    physics: physics::World,
+    pub physics: physics::World,
 }
 
 impl Simulation {
+    const SELECTION_LAYER: physics::Layer = physics::Layer::new(4);
+
     /// Create a simulation with a space of the given dimensions
     pub fn new(size: Vector2) -> Self {
         let mut collision_matrix = CollisionMatrix::new();
         collision_matrix.insert(Blob::LAYER, physics::LayerMask::new(vec![Food::LAYER, Blob::LAYER]));
         collision_matrix.insert(Food::LAYER, physics::LayerMask::empty());
         collision_matrix.insert(Blob::SIGHT_LAYER, physics::LayerMask::new(vec![Food::LAYER, Blob::LAYER]));
+        collision_matrix.insert(Self::SELECTION_LAYER, physics::LayerMask::new(vec![Food::LAYER, Blob::LAYER]));
         Self {
             size,
             blobs: KeyedSet::new(),
@@ -296,6 +299,12 @@ impl Simulation {
         blob
     }
 
+    pub fn move_blob(&mut self, blob: Key<Blob>, amount: Vector2) {
+        if let Some(blob) = self.blobs.get_mut(blob) {
+            blob.set_pos(&mut self.physics, blob.pos() + amount);
+        }
+    }
+
     /// Put a food in the simulation.
     pub fn insert_food(&mut self, pos: Vector2) -> Key<Food> {
         //  create food
@@ -330,6 +339,30 @@ impl Simulation {
         }
 
         food
+    }
+
+    pub fn select(&mut self, pos: Vector2) -> (Vec<Key<Blob>>, Vec<Key<Food>>) {
+        let mut foods = vec![];
+        let mut blobs = vec![];
+        let key = self.physics.circles.insert(Circle {
+            center: pos, 
+            radius: 0.01,
+            layer: Self::SELECTION_LAYER,
+        });
+        let collisions = self.physics.collisions();
+        self.physics.circles.remove(key);
+        if let Some(collided) = collisions.get(&key) {
+            for touched in collided {
+                match self.objects.get(touched) {
+                    Some(&CircleObject::Blob(blob)) => blobs.push(blob),
+                    Some(&CircleObject::Food(food)) => foods.push(food),
+                    _ => (),
+                }
+            }
+            (blobs, foods)
+        } else {
+            (vec![], vec![])
+        }
     }
 }
 

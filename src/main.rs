@@ -84,6 +84,7 @@ fn main() {
     }
 
     let mut last_frame_time = time::Instant::now();
+    let mut prev_mouse_position = window.handle().get_mouse_position();
     window.draw_loop(|mut draw| {
         //  record time and calculate delta
         let frame_time = time::Instant::now();
@@ -105,8 +106,17 @@ fn main() {
             add_random_food(&mut sim);
         }
 
-        if draw.is_mouse_button_pressed(MouseButton::MOUSE_LEFT_BUTTON) {
-            let blob_key = add_random_blob(&mut sim, &mut names);
+        if draw.is_key_down(KeyboardKey::KEY_SPACE) {
+            add_random_blob(&mut sim, &mut names);
         }
+
+        if draw.is_mouse_button_down(MouseButton::MOUSE_LEFT_BUTTON) {
+            let (blobs, _foods) = sim.select(draw.get_mouse_position());
+            for blob in blobs {
+                sim.move_blob(blob, draw.get_mouse_position() - prev_mouse_position);
+            }
+        }
+
+        prev_mouse_position = draw.get_mouse_position();
     });
 }
