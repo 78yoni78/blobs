@@ -20,6 +20,8 @@ impl Layer {
 
 impl LayerMask {
     pub const fn empty() -> Self { Self(0) }
+
+    pub const fn full() -> Self { Self(!0) }
     
     pub fn add(&mut self, Layer(bits): Layer) {
         self.0 |= bits;
