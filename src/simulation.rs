@@ -211,6 +211,13 @@ impl Simulation {
                     blobs_to_remove.insert(defender_key, defender.pos);
                 }
             }
+            {
+                let dir = (blob2.pos() - blob1.pos()).normalized();
+                let pos1 = blob2.pos() - dir * (blob1.radius() + blob2.radius());
+                let pos2 = blob1.pos() + dir * (blob1.radius() + blob2.radius());
+                self.blobs.get_mut(blob1_key).unwrap().set_pos(&mut self.physics, pos1);
+                self.blobs.get_mut(blob2_key).unwrap().set_pos(&mut self.physics, pos2);
+            }
         }
 
         //  step blobs
