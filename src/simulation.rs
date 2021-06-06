@@ -182,7 +182,8 @@ impl Simulation {
             if let Some(touched) = collisions.get(&blob.circle) {
                 for circle in touched {
                     if let Some(&CircleObject::Food(food)) = self.objects.get(circle) {
-                        blob.eat(&mut self.foods, food);
+                        blob.feed();
+                        foods_to_remove.insert(food);
                     }
                 }
             }
@@ -406,7 +407,7 @@ impl Blob {
         color.fade(1. - self.hunger / self.max_hunger)
     }
 
-    fn feed(&mut self) { 
+    pub fn feed(&mut self) { 
         //  h1 = max( (h0 - hunger_reduction*h_max) / (1 + hunger_division),  0 )
         self.hunger = f32::max(
             (self.hunger - self.hunger_reduction * self.max_hunger)
@@ -414,11 +415,6 @@ impl Blob {
             (1. + self.hunger_division),
             0.
         );
-    }
-
-    pub fn eat(&mut self, foods: &mut KeyedSet<Food>, food: Key<Food>) {
-        self.feed();
-        foods.remove(food);
     }
 
     pub fn draw(&self, draw: &mut DrawingContext) {
