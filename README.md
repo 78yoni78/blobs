@@ -4,6 +4,8 @@ A graphical 2D simulation of living blobs that eat food and also each other
 # What Is The Goal?
 The goal was to create a simulation where through natural selection and high diversity interesting behaviors from real evolution will arise like camouflaging and fear of certain colors.
 
+![Example](example-picture.jpg)
+
 # Features
 * Many randomly-selected properties for blobs such as speed, need for food, attack, field of view, and many more
 * Visual representation for health of blobs
