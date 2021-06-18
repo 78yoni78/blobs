@@ -119,7 +119,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "raylib_test"
+name = "blobs"
 version = "0.1.0"
 dependencies = [
  "rand",

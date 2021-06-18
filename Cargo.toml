@@ -1,5 +1,5 @@
 [package]
-name = "raylib_test"
+name = "blobs"
 version = "0.1.0"
 authors = ["Yonatan Reicher <yony252525@gmail.com>"]
 edition = "2018"
