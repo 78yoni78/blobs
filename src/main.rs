@@ -131,5 +131,19 @@ fn main() {
         } else {
             selection = None;
         }
+
+        if let Some(selection) = &selection {
+            let mut y = 10;
+            for (&blob_key, _) in &selection.blobs {
+                if let Some(blob) = sim.get_blob(blob_key) {
+                    let font_size = 20;
+                    draw.draw_text(
+                        &format!("Speed: {} Pov: {} Depth: {}", blob.speed, blob.pov, blob.sight_depth()), 
+                        10, y, font_size, Color::BLACK
+                    );
+                    y += font_size;
+                }
+            }
+        }
     });
 }
